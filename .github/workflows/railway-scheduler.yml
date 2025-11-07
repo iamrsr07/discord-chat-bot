@@ -1,6 +1,6 @@
 name: Railway Auto Start/Stop Bot
 
-# Trigger: schedule (EST) and manual
+# Trigger: schedule (EST) and manualss
 on:
   schedule:
     # 9:00 AM EST → 14:00 UTC
