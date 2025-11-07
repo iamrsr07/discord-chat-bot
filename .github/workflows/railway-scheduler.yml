@@ -23,13 +23,14 @@ jobs:
           # Start at 9 AM EST (14 UTC)
           if [ "$HOUR" -eq "14" ]; then
             echo "Starting bot (9 AM EST)..."
-            railway up --service "discord-chat-bot" --yes
+            railway up --service "discord-chat-bot" --yes --environment "zealous-perfection" --yes
 
           # Stop at 5 PM EST (22 UTC)
           elif [ "$HOUR" -eq "22" ]; then
             echo "Stopping bot (5 PM EST)..."
-            railway stop --service "discord-chat-bot" --yes
+            railway stop --service "discord-chat-bot" --yes  --environment "zealous-perfection" --yes
 
           else
-            echo "No action right now."
+           echo "Current UTC hour: $HOUR"
+
           fi
