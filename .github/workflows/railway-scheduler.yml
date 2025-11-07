@@ -21,10 +21,10 @@ jobs:
           # 14 = 9 AM EST, 22 = 5 PM EST
           if [ "$HOUR" -eq "14" ]; then
             echo "Starting bot (9 AM EST)..."
-            railway up --service "your-service-name" --yes
+           railway up --service "discord-chat-bot" --yes 
           elif [ "$HOUR" -eq "22" ]; then
             echo "Stopping bot (5 PM EST)..."
-            railway remove --service "your-service-name" --yes
+           railway stop --service "discord-chat-bot" --yes
           else
             echo "No action right now."
           fi
