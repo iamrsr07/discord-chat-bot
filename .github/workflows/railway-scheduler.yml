@@ -1,30 +1,35 @@
 name: Railway Auto Start/Stop Bot
 
+# Trigger: schedule (EST) and manual
 on:
   schedule:
-    # 9:00 AM EST (14:00 UTC)
+    # 9:00 AM EST → 14:00 UTC
     - cron: '0 14 * * *'
-    # 5:00 PM EST (22:00 UTC)
+    # 5:00 PM EST → 22:00 UTC
     - cron: '0 22 * * *'
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch: # manual trigger
+
 jobs:
   railway:
     runs-on: ubuntu-latest
     steps:
-      - name: Start or stop Railway bot
+      - name: Start or Stop Railway Bot
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          # Detect current UTC hour (integer)
+          # Get current UTC hour
           HOUR=$(date -u +'%H')
 
-          # 14 = 9 AM EST, 22 = 5 PM EST
+          # Start at 9 AM EST (14 UTC)
           if [ "$HOUR" -eq "14" ]; then
             echo "Starting bot (9 AM EST)..."
-           railway up --service "discord-chat-bot" --yes 
+            railway up --service "discord-chat-bot" --yes
+
+          # Stop at 5 PM EST (22 UTC)
           elif [ "$HOUR" -eq "22" ]; then
             echo "Stopping bot (5 PM EST)..."
-           railway stop --service "discord-chat-bot" --yes
+            railway stop --service "discord-chat-bot" --yes
+
           else
             echo "No action right now."
           fi
