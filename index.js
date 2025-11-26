@@ -11,7 +11,7 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
-// CONFIGURATION
+// CONFIGURATIONssssss
 const SUPERVISORS = [
   {
     id: "1235236826793381908",
