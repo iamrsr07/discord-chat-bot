@@ -7,7 +7,7 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMessageReactions,   // 👈 REQUIRED FOR EMOJI DETECTION
+    GatewayIntentBits.GuildMessageReactions
   ],
   partials: [Partials.Channel, Partials.Message, Partials.Reaction],
 });
@@ -100,9 +100,9 @@ const SUPERVISORS = [
 const MANAGER_ID = "960685716852072458";
 
 // === TIMER SETTINGS ===
-const TWO_HOURS = 2 * 60 * 60 * 1000;
-const ONE_AND_HALF_HOUR = 1.5 * 60 * 60 * 1000;
-const THIRTY_MINUTES = 30 * 60 * 1000;
+const ONE_MINUTE = 1 * 60 * 1000;
+const THIRTY_SECONDS = 30 * 1000;
+const TEN_SECONDS = 10 * 1000;
 
 // === TRACKERS ===
 const supervisorTrackers = new Map();
@@ -119,20 +119,25 @@ function ensureSupervisorMap(supervisorId) {
   return supervisorTrackers.get(supervisorId);
 }
 
-// Working hours (9 AM – 5 PM EST)
+// === WORKING HOURS CHECK ===
 function isWithinWorkingHours() {
   const now = new Date();
-  const estNow = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const estNow = new Date(
+    now.toLocaleString("en-US", { timeZone: "America/New_York" })
+  );
   const hours = estNow.getHours();
   return hours >= 9 && hours < 17;
 }
 
-// === EVENT: TRACK CLIENT MESSAGE ===
+// === EVENT: USER MESSAGE → START TIMER ===
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   const supervisor = getSupervisorByChannel(message.channel.id);
   if (!supervisor) return;
+
+  // Ignore messages from supervisors themselves so they don’t trigger timers
+  if (message.author.id === supervisor.id || message.author.id === MANAGER_ID) return;
 
   const supervisorId = supervisor.id;
   const supervisorMessages = ensureSupervisorMap(supervisorId);
@@ -145,7 +150,6 @@ client.on("messageCreate", async (message) => {
 
   const timers = {};
 
-  // Step 1 DM after 2 hours
   timers.supervisorTimer = setTimeout(async () => {
     if (!isWithinWorkingHours()) return;
 
@@ -155,7 +159,6 @@ client.on("messageCreate", async (message) => {
         `⏰ Hey <@${supervisorId}>, you haven’t replied to <@${userId}>'s message yet!\nLink: ${msgLink}`
       );
 
-      // Step 2 reminder after 1.5 hours
       timers.reminderTimer = setTimeout(async () => {
         if (!isWithinWorkingHours()) return;
 
@@ -164,29 +167,26 @@ client.on("messageCreate", async (message) => {
             `⚠️ Reminder: You still haven’t replied to <@${userId}>'s message.\nLink: ${msgLink}`
           );
 
-          // Step 3 escalate after 30 min
           timers.managerTimer = setTimeout(async () => {
             if (!isWithinWorkingHours()) return;
 
             try {
               const manager = await client.users.fetch(MANAGER_ID);
               await manager.send(
-                `🚨 Clients <@${supervisorId}> has not replied to <@${userId}>'s message.\nLink: ${msgLink}`
+                `🚨 Supervisor <@${supervisorId}> has not replied to <@${userId}>'s message.\nLink: ${msgLink}`
               );
             } catch (err) {
               console.error("❌ Error sending manager DM:", err);
             }
-          }, THIRTY_MINUTES);
-
+          }, TEN_SECONDS);
         } catch (err) {
           console.error("❌ Error sending reminder:", err);
         }
-      }, ONE_AND_HALF_HOUR);
-
+      }, THIRTY_SECONDS);
     } catch (err) {
       console.error("❌ Error sending supervisor DM:", err);
     }
-  }, TWO_HOURS);
+  }, ONE_MINUTE);
 
   supervisorMessages.set(msgId, {
     userId,
@@ -196,20 +196,19 @@ client.on("messageCreate", async (message) => {
   });
 });
 
-// === EVENT: SUPERVISOR OR MANAGER MESSAGE REPLY ===
+// === EVENT: SUPERVISOR OR MANAGER REPLY ===
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
-
-  const isSupervisor = SUPERVISORS.some((sup) => sup.id === message.author.id);
-  const isManager = message.author.id === MANAGER_ID;
-
-  if (!isSupervisor && !isManager) return;
 
   const supervisor = getSupervisorByChannel(message.channel.id);
   if (!supervisor) return;
 
-  const supervisorId = supervisor.id;
-  const supervisorMessages = supervisorTrackers.get(supervisorId);
+  const isSupervisor = message.author.id === supervisor.id;
+  const isManager = message.author.id === MANAGER_ID;
+
+  if (!isSupervisor && !isManager) return;
+
+  const supervisorMessages = supervisorTrackers.get(supervisor.id);
   if (!supervisorMessages) return;
 
   for (const [msgId, tracked] of supervisorMessages.entries()) {
@@ -217,7 +216,6 @@ client.on("messageCreate", async (message) => {
       clearTimeout(tracked.timers.supervisorTimer);
       clearTimeout(tracked.timers.reminderTimer);
       clearTimeout(tracked.timers.managerTimer);
-
       supervisorMessages.delete(msgId);
 
       console.log(
@@ -227,40 +225,43 @@ client.on("messageCreate", async (message) => {
   }
 
   if (supervisorMessages.size === 0) {
-    supervisorTrackers.delete(supervisorId);
+    supervisorTrackers.delete(supervisor.id);
   }
 });
 
-// === NEW: EVENT — SUPERVISOR EMOJI REACTION ===
+// === EVENT: SUPERVISOR OR MANAGER REACTION ===
 client.on("messageReactionAdd", async (reaction, user) => {
   if (user.bot) return;
 
-  const isSupervisor = SUPERVISORS.some((sup) => sup.id === user.id);
-  if (!isSupervisor) return;
-
-  const msg = reaction.message;
-
-  const supervisor = getSupervisorByChannel(msg.channel.id);
+  const message = reaction.message;
+  const supervisor = getSupervisorByChannel(message.channel.id);
   if (!supervisor) return;
 
-  const supervisorId = supervisor.id;
-  const supervisorMessages = supervisorTrackers.get(supervisorId);
+  const isSupervisor = user.id === supervisor.id;
+  const isManager = user.id === MANAGER_ID;
+
+  if (!isSupervisor && !isManager) return;
+
+  const supervisorMessages = supervisorTrackers.get(supervisor.id);
   if (!supervisorMessages) return;
 
-  const tracked = supervisorMessages.get(msg.id);
-  if (!tracked) return;
+  for (const [msgId, tracked] of supervisorMessages.entries()) {
+    if (tracked.channelId === message.channel.id) {
+      clearTimeout(tracked.timers.supervisorTimer);
+      clearTimeout(tracked.timers.reminderTimer);
+      clearTimeout(tracked.timers.managerTimer);
+      supervisorMessages.delete(msgId);
 
-  // Stop timers on emoji
-  clearTimeout(tracked.timers.supervisorTimer);
-  clearTimeout(tracked.timers.reminderTimer);
-  clearTimeout(tracked.timers.managerTimer);
+      console.log(`🟢 ${isManager ? "Manager" : "Supervisor"} ${user.id} reacted → cleared timers for ${msgId}`);
+    }
+  }
 
-  supervisorMessages.delete(msg.id);
-
-  console.log(`🎉 Supervisor ${user.id} reacted with emoji → cleared timers for ${msg.id}`);
+  if (supervisorMessages.size === 0) {
+    supervisorTrackers.delete(supervisor.id);
+  }
 });
 
-// Shutdown
+// === SHUTDOWN CLEANUP ===
 process.on("SIGINT", () => {
   console.log("🛑 Shutting down...");
   for (const [, msgs] of supervisorTrackers) {
